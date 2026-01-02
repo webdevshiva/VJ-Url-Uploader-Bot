@@ -1,11 +1,10 @@
 name: Run VJ URL Uploader Bot
 
 on:
-  workflow_dispatch:  # Manual run ke liye
+  workflow_dispatch:
   push:
     branches: [ main ]
   schedule:
-    # Har 30 minutes par restart hoga
     - cron: '*/30 * * * *'
 
 jobs:
@@ -21,10 +20,7 @@ jobs:
       TECH_VJ_OWNER_ID: ${{ secrets.OWNER_ID }}
       TECH_VJ_LOG_CHANNEL: ${{ secrets.LOG_CHANNEL }}
       TECH_VJ_UPDATES_CHANNEL: ${{ secrets.UPDATES_CHANNEL }}
-      TECH_VJ: "False"  # Token verification off
-      TECH_VJ_URL: ""
-      TECH_VJ_API: ""
-      TECH_VJ_TUTORIAL: ""
+      TECH_VJ: "False"
     
     steps:
     - name: Checkout code
@@ -38,15 +34,20 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-pip
+        sudo apt-get install -y ffmpeg python3-pip wget
     
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip
+        # Pehle base packages install karein
+        pip install Flask==2.3.2 pymongo==4.5.0 python-telegram-bot==13.15
+        # Phir requirements.txt install karein
         pip install -r requirements.txt
-        pip install pymongo[srv] python-telegram-bot==13.15
+        
+        # Extra packages jo zaroori hain
+        pip install motor==3.3.2 psutil pySmartDL==1.3.4
     
-    - name: Create config.py with env variables
+    - name: Create config.py
       run: |
         cat > config.py << EOF
         import os
@@ -64,11 +65,30 @@ jobs:
             TECH_VJ_URL = os.environ.get("TECH_VJ_URL", "")
             TECH_VJ_API = os.environ.get("TECH_VJ_API", "")
             TECH_VJ_TUTORIAL = os.environ.get("TECH_VJ_TUTORIAL", "")
+            
+            # Bot ke liye zaroori variables
+            DOWNLOAD_LOCATION = "./DOWNLOADS"
+            MAX_FILE_SIZE = 50000000
+            TG_MAX_FILE_SIZE = 2097152000
+            FREE_USER_MAX_FILE_SIZE = 50000000
+            CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", 128))
+            HTTP_PROXY = os.environ.get("HTTP_PROXY", "")
+            OUO_IO_API_KEY = ""
+            MAX_MESSAGE_LENGTH = 4096
+            
+            # Database settings
+            DATABASE_URL = os.environ.get("TECH_VJ_DB_URI", "")
+            COLLECTION_NAME = "Telegram_files"
         EOF
+    
+    - name: Create directories
+      run: |
+        mkdir -p DOWNLOADS THUMBNAILS
     
     - name: Run the bot
       run: |
-        # Keep alive server start karte hain
+        echo "Bot starting..."
+        # Create a simple keep-alive script
         python -c "
         from flask import Flask
         from threading import Thread
@@ -78,14 +98,27 @@ jobs:
         
         @app.route('/')
         def home():
-            return 'VJ URL Uploader Bot is running via GitHub Actions!'
+            return 'VJ URL Bot Running'
         
         def run_flask():
             app.run(host='0.0.0.0', port=8080)
         
-        # Flask server in background
         Thread(target=run_flask, daemon=True).start()
+        print('Flask server started')
         "
         
-        # Main bot run karte hain
-        timeout 2400 python bot.py  # 40 minutes ke liye run hoga
+        # Run main bot (35 minutes tak)
+        timeout 2100 python -c "
+        import subprocess
+        import sys
+        
+        print('Starting bot.py...')
+        result = subprocess.run([sys.executable, 'bot.py'], 
+                              capture_output=True, text=True)
+        print('Bot output:', result.stdout)
+        if result.stderr:
+            print('Bot errors:', result.stderr)
+        print('Exit code:', result.returncode)
+        "
+        
+        echo "Bot session completed. Will restart in next scheduled run."
