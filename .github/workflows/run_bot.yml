@@ -1,0 +1,91 @@
+name: Run VJ URL Uploader Bot
+
+on:
+  workflow_dispatch:  # Manual run ke liye
+  push:
+    branches: [ main ]
+  schedule:
+    # Har 30 minutes par restart hoga
+    - cron: '*/30 * * * *'
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    env:
+      TECH_VJ_API_ID: ${{ secrets.API_ID }}
+      TECH_VJ_API_HASH: ${{ secrets.API_HASH }}
+      TECH_VJ_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      TECH_VJ_BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
+      TECH_VJ_DB_URI: ${{ secrets.DB_URI }}
+      TECH_VJ_OWNER_ID: ${{ secrets.OWNER_ID }}
+      TECH_VJ_LOG_CHANNEL: ${{ secrets.LOG_CHANNEL }}
+      TECH_VJ_UPDATES_CHANNEL: ${{ secrets.UPDATES_CHANNEL }}
+      TECH_VJ: "False"  # Token verification off
+      TECH_VJ_URL: ""
+      TECH_VJ_API: ""
+      TECH_VJ_TUTORIAL: ""
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg python3-pip
+    
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pymongo[srv] python-telegram-bot==13.15
+    
+    - name: Create config.py with env variables
+      run: |
+        cat > config.py << EOF
+        import os
+        
+        class Config:
+            API_ID = int(os.environ.get("TECH_VJ_API_ID", 0))
+            API_HASH = os.environ.get("TECH_VJ_API_HASH", "")
+            BOT_TOKEN = os.environ.get("TECH_VJ_BOT_TOKEN", "")
+            BOT_USERNAME = os.environ.get("TECH_VJ_BOT_USERNAME", "")
+            DB_URI = os.environ.get("TECH_VJ_DB_URI", "")
+            OWNER_ID = int(os.environ.get("TECH_VJ_OWNER_ID", 0))
+            LOG_CHANNEL = int(os.environ.get("TECH_VJ_LOG_CHANNEL", 0))
+            UPDATES_CHANNEL = os.environ.get("TECH_VJ_UPDATES_CHANNEL", "")
+            TECH_VJ = os.environ.get("TECH_VJ", "False")
+            TECH_VJ_URL = os.environ.get("TECH_VJ_URL", "")
+            TECH_VJ_API = os.environ.get("TECH_VJ_API", "")
+            TECH_VJ_TUTORIAL = os.environ.get("TECH_VJ_TUTORIAL", "")
+        EOF
+    
+    - name: Run the bot
+      run: |
+        # Keep alive server start karte hain
+        python -c "
+        from flask import Flask
+        from threading import Thread
+        import os
+        
+        app = Flask(__name__)
+        
+        @app.route('/')
+        def home():
+            return 'VJ URL Uploader Bot is running via GitHub Actions!'
+        
+        def run_flask():
+            app.run(host='0.0.0.0', port=8080)
+        
+        # Flask server in background
+        Thread(target=run_flask, daemon=True).start()
+        "
+        
+        # Main bot run karte hain
+        timeout 2400 python bot.py  # 40 minutes ke liye run hoga
